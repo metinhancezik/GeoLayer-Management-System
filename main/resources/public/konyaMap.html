@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+  <meta charset="UTF-8">
+  <title>KonyaMap</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/alertifyjs@1.13.1/build/css/alertify.min.css"/>
+  <!-- AlertifyJS Default tema -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/alertifyjs@1.13.1/build/css/themes/default.min.css"/>
+
+  <style>
+    #map {
+      height: 570px;
+    }
+
+    .button-container {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .button-container button {
+      margin-bottom: 10px;
+    }
+
+    .radio-container {
+      display: none;
+      flex-wrap: wrap;
+      align-items: center;
+      flex-direction: row;
+    }
+
+    .radio-container label {
+      display: inline-block;
+      margin-right: 15px;
+    }
+
+    #MahalleGoster ol {
+      list-style-type: decimal;
+      margin: 10px 0;
+      padding: 0;
+    }
+
+    #MahalleGoster ol li {
+      margin: 5px;
+      padding: 5px;
+      font-size: 14px;
+    }
+    #mahalleDropdown{
+
+    margin:4px;
+    }
+    ilceDropdown{
+     margin:4px;
+    }
+    .layer-separator {
+    height: 1px;
+    background-color: #000;
+    margin: 10px 0;
+}
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1;
+    padding-top: 100px;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgb(0,0,0);
+    background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+}
+
+
+  </style>
+</head>
+
+<body>
+<div class="container">
+
+
+  <div class="row mt-3">
+
+    <div class="col-11">
+      <div id="map"></div>
+
+
+
+
+    </div>
+    <div class="col-1">
+      <a href="/logout" class="btn btn-danger">Log Out</a>
+      <a href="/userInfo" class="btn btn-primary m-4">User</a>
+    </div>
+    <div class="row">
+
+      <div class="col-10">
+        <div class="radio-container" id="ilceRadioContainer">
+
+        </div>
+        <div id="MahalleGoster">
+
+        </div>
+
+
+
+
+
+      </div>
+      <div class="col-2 mt-2">
+        <button id="resetButton" class="btn btn-primary"  onclick="Reset()">Reset</button>
+        <div id="ShapeName" class="m-2" >
+          <input type="text" id="shapeNameInput" class="form-control" placeholder="Shape ismini giriniz..." hidden>
+        </div>
+        <button id="ShapeSave" class="btn btn-primary"  onclick="SaveShapeFunc()" hidden>Save</button>
+      </div>
+
+    </div>
+    <div id="myModal" class="modal">
+      <div class="modal-content">
+        <p>Öğrenmek istediğiniz katmanı seçiniz:</p>
+        <input type="radio" id="ilce" name="katman" value="ilce">
+        <label for="ilce">İlçe Katmanı</label><br>
+        <input type="radio" id="mahalle" name="katman" value="mahalle">
+        <label for="mahalle">Mahalle Katmanı</label><br>
+        <button id="submitBtn">Gönder</button>
+      </div>
+    </div>
+
+
+
+  </div>
+</div>
+
+
+<!-- Bootstrap JS and Leaflet -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script src="/resources/static/IlceVerisi.json" type="application/json" id="ilce-verisi"></script>
+<script src="/resources/static/IlceVerisi_2.json" type="application/json" id="ilce-verisi2"></script>
+<script src="/Ilceler.json" type="application/json" id="ilcelerCoord"></script>
+<script src="/mahalleData.json" type="application/json" id="mahalleCoord"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="https://npmcdn.com/wellknown@0.5.0/wellknown.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/alertifyjs@1.13.1/build/alertify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+
+
+<script>
+    var map;
+    var wmsLayer;
+    var selectedOption;
+    var selectedMahalleID;
+    var selectedIlceler = []; // Array to store the selected Ilce numbers
+    let shapesArray = [];
+    var type;
+    var url ;
+
+
+      var allDistrictsLayer = L.tileLayer.wms('http://localhost:8082/geoserver/GeoserverTurkiye/wms', {
+      layers: 'GeoserverTurkiye:ilcepolygon', // İlçe katmanını belirtin
+      format: 'image/png',
+      transparent: true,
+    });
+
+       var initialMapView = {
+      center: [38.03, 32.50],
+      zoom: 8,
+    };
+
+
+var userID;
+
+ fetch('/userInformation')
+        .then(response => response.json())
+        .then(user => {
+            userID=user.id;
+
+        }).catch(error => console.error('Error:', error));
+
+
+
+/*
+function saveMarker(data, shapeName) {
+debugger;
+    var savePath = `/saveMarker?userId=${userID}&shapeName=${shapeName}`;
+
+    fetch(savePath, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => console.log(data));
+}
+
+function savePolyline(data, shapeName) {
+debugger;
+    var savePath = `/savePolyine?userId=${userID}&shapeName=${shapeName}`;
+
+    fetch(savePath, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => console.log(data));
+}
+
+// similar function for other shape types...
+
+function SaveShapeFunc() {
+    debugger;
+    var shapeName = document.getElementById('shapeNameInput').value;
+    if (shapeName.trim() === '') {
+        alert('Lütfen bir isim giriniz.');
+        return;
+    }
+
+    for (let shape of shapesArray) {
+        var data = {
+            shapeData: shape,
+        };
+
+        if(shape.type == 'marker') {
+            saveMarker(data, shapeName);
+        } else if(shape.type == 'polyline') {
+            savePolyline(data, shapeName);
+        } else {
+            // call the relevant function for other shape types...
+        }
+    }
+
+    document.getElementById("ShapeSave").hidden = true;
+    document.getElementById("shapeNameInput").hidden = true;
+
+    window.location.href = 'http://localhost:8080/Konya';
+}
+
+
+
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function SaveShapeFunc() {
+debugger;
+    var shapeName = document.getElementById('shapeNameInput').value;
+    if (shapeName.trim() === '') {
+        alert('Lütfen bir isim giriniz.');
+        return;
+    }
+
+    var data = {
+        shapeData: shapesArray,
+    };
+
+    console.log(data);
+debugger;
+for (let shape of data.shapeData) {
+    var savePath;
+    if(shape.type == 'marker') {
+        savePath = `/saveMarker?userId=${userID}&shapeName=${shapeName}`;
+        fetch(savePath, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        console.log(response);
+        return response.json();
+    })
+    } else if(shape.type == 'polyline') {
+        savePath = `/savePolyine?userId=${userID}&shapeName=${shapeName}`;
+        fetch(savePath, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        console.log(response);
+        return response.json();
+    })
+    } else {
+        savePath = `/save?userId=${userID}&shapeName=${shapeName}`;
+        fetch(savePath, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        console.log(response);
+        return response.json();
+    })
+    }
+
+}
+
+    document.getElementById("ShapeSave").hidden = true;
+    document.getElementById("shapeNameInput").hidden = true;
+
+    window.location.href = 'http://localhost:8080/Konya';
+}
+
+
+
+
+
+
+    function Reset(){
+     map.setView(initialMapView.center, initialMapView.zoom);
+
+     fetch('/ilceler')
+          .then(response => response.json())
+          .then(ilceler => {
+            var ilceNumaralari = ilceler.map(ilce => ilce.ilceNo).join("','");
+            var cqlFilter = `ilceref IN ('${ilceNumaralari}')`;
+            console.log(cqlFilter);
+            cqlFilter = cqlFilter.trim();
+            var obj = {
+              'CQL_FILTER': cqlFilter
+            };
+            console.log(obj);
+
+            wmsLayer.setParams({
+            layers: 'GeoserverTurkiye:Konya',
+            format: 'image/png',
+            transparent: true,
+          });
+
+          });
+           hideNeighborhoods();
+}
+
+
+
+    function bringKonya() {
+      wmsLayer.setParams({
+        layers: 'GeoserverTurkiye:Konya'
+      });
+
+    }
+
+    function bringIlceler() {
+      wmsLayer.setParams({
+        layers: 'GeoserverTurkiye:ilcepolygon'
+      });
+
+    }
+
+function bringMahalleler() {
+  wmsLayer.setParams({
+    layers: 'GeoserverTurkiye:mahallepolygon'
+  });
+
+}
+    function showIlcelerContainer() {
+      ilceRadioContainer.style.display = 'flex';
+    }
+
+
+    function hideNeighborhoods() { // Mahalle Dropdown Gizliyor
+      var mahalleGosterDiv = document.getElementById('MahalleGoster');
+      mahalleGosterDiv.innerHTML = '';
+    }
+
+    function mahalleleriGoster() {
+  try {
+    fetch('/mahalleler')
+      .then(response => response.json())
+      .then(mahalleler => {
+        var selectedMahalleler = [];
+
+        for (var i = 0; i < mahalleler.length; i++) {
+          var mahalle = mahalleler[i];
+          if (mahalle.ilceNo == selectedOption) {
+            selectedMahalleler.push(mahalle);
+          }
+        }
+
+        var dropdownHTML = '<select id="mahalleDropdown" class="btn btn-secondary dropdown-toggle m-2">';
+        for (var i = 0; i < selectedMahalleler.length; i++) {
+          var mahalleAdi = selectedMahalleler[i].mahalleAdi;
+          var mahalleID = selectedMahalleler[i].id;
+          dropdownHTML += `<option value="${mahalleID}">${i + 1}) ${mahalleAdi}</option>`;
+        }
+        dropdownHTML += '</select>';
+
+        var mahalleGosterDiv = document.getElementById('MahalleGoster');
+        mahalleGosterDiv.innerHTML = dropdownHTML;
+
+        var mahalleDropdown = document.getElementById('mahalleDropdown');
+        mahalleDropdown.addEventListener('change', function () {
+           selectedMahalleID = mahalleDropdown.value;
+          sendToCQLFilter(selectedMahalleID);
+          zoomMahalle();
+        });
+      })
+      .catch(error => {
+        console.error('Error:', error);
+      });
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+var IlceTut;
+     function sendToCQLFilter2(selectedIlceNo) {
+      try {
+        var cqlFilter;
+        if (selectedIlceNo) {
+          cqlFilter = `ilceref='${selectedIlceNo}'`;
+          IlceTut=cqlFilter;
+          wmsLayer.setParams({
+            layers: 'GeoserverTurkiye:SecilenIlce',
+            format: 'image/png',
+            transparent: true,
+            CQL_FILTER: cqlFilter, // Seçilen ilçe için CQL filtresini ayarlayın
+          });
+
+          // "SecilenIlce" katmanını haritaya ekleyin ve "allDistrictsLayer" ile birlikte gruplayarak her iki katmanı aynı anda gösterin
+          L.layerGroup([allDistrictsLayer, selectedDistrictLayer]).addTo(map);
+        } else {
+          cqlFilter = '';
+          wmsLayer.setParams({
+            layers: 'GeoserverTurkiye:ilcepolygon',
+            format: 'image/png',
+            transparent: true,
+          });
+
+          // Sıfırla (reset) butonuna basıldığında, "SecilenIlce" katmanını gizleyin ve yalnızca "allDistrictsLayer" katmanını gösterin
+          L.layerGroup([allDistrictsLayer]).addTo(map);
+        }
+
+        console.log('Seçilen İlçe No:', selectedIlceNo);
+        console.log('CQL Filtresi:', cqlFilter);
+      } catch (error) {
+        console.error('Hata:', error);
+      }
+    }
+
+function sendToCQLFilter(selectedMahalleID) {
+  try {
+    var cqlFilterMahalle;
+    var cqlFilterIlce;
+
+    if (selectedMahalleID) {
+      cqlFilterMahalle = `mahalleref='${selectedMahalleID}'`;
+      cqlFilterIlce = IlceTut;
+      wmsLayer.setParams({
+        layers: 'GeoserverTurkiye:SecilenIlce,GeoserverTurkiye:SecilenMahalle',
+        format: 'image/png',
+        transparent: true,
+        CQL_FILTER: `${cqlFilterIlce};${cqlFilterMahalle}`,
+      });
+
+      L.layerGroup([selectedNeighborhoodLayer, selectedDistrictLayer]).addTo(map);
+      selectedDistrictLayer.setOpacity(0.5); // İlçe katmanının opaklığını ayarlayın
+
+    } else {
+      cqlFilterMahalle = '';
+      cqlFilterIlce = '';
+      wmsLayer.setParams({
+        layers: 'GeoserverTurkiye:ilcepolygon',
+        format: 'image/png',
+        transparent: true,
+      });
+
+      L.layerGroup([allDistrictsLayer]).addTo(map);
+    }
+
+    console.log('Selected Mahalle ID:', selectedMahalleID);
+    console.log('CQL Filter (Mahalle):', cqlFilterMahalle);
+    console.log('CQL Filter (İlçe):', cqlFilterIlce);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+
+
+
+  function populateIlceRadios() {
+  try {
+    fetch('/ilceler')
+      .then(response => response.json())
+      .then(ilceler => {
+        var dropdownHTML = '<select id="ilceDropdown" class="btn btn-secondary dropdown-toggle m-2">';
+        for (var i = 0; i < ilceler.length; i++) {
+          var ilce = ilceler[i];
+          var ilceAdi = ilce.ilceAdi;
+          var ilceNo = ilce.ilceNo;
+          dropdownHTML += `<option value="${ilceNo}">${i + 1}) ${ilceAdi}</option>`;
+        }
+        dropdownHTML += '</select>';
+
+        ilceRadioContainer = document.getElementById('ilceRadioContainer');
+        ilceRadioContainer.innerHTML = dropdownHTML;
+
+        var ilceDropdown = document.getElementById('ilceDropdown');
+        ilceDropdown.addEventListener('change', function () {
+           selectedOption = ilceDropdown.value;
+          sendToCQLFilter2(selectedOption); // Seçilen ilçeNo'yu sendToCQLFilter2 fonksiyonuna gönder
+          mahalleleriGoster();
+          zoomIlce();
+        });
+      })
+      .catch(error => {
+        console.error('Error:', error);
+      });
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+var allMahalle=L.tileLayer.wms('http://localhost:8082/geoserver/GeoserverTurkiye/wms', {
+      layers: 'GeoserverTurkiye:ilcepolygon',
+      format: 'image/png',
+      transparent: true,
+       CQL_FILTER: "0",
+    });
+
+    var allDistrictsLayer = L.tileLayer.wms('http://localhost:8082/geoserver/GeoserverTurkiye/wms', {
+      layers: 'GeoserverTurkiye:ilcepolygon',
+      format: 'image/png',
+      transparent: true,
+    });
+
+    var selectedDistrictLayer = L.tileLayer.wms('http://localhost:8082/geoserver/GeoserverTurkiye/wms', {
+      layers: 'GeoserverTurkiye:SecilenIlce', // "SecilenIlce" katmanını belirtin
+      format: 'image/png',
+      transparent: true,
+      CQL_FILTER: "0", // Başlangıçta hiçbir şey göstermeyecek (varsayılan olarak 0)
+      styles: 'selected-district-style', // Yeni stili belirtin
+    });
+ var selectedNeighborhoodLayer = L.tileLayer.wms('http://localhost:8082/geoserver/GeoserverTurkiye/wms', {
+      layers: 'GeoserverTurkiye:SecilenMahalle', // "SecilenMahalle" katmanını belirtin
+      format: 'image/png',
+      transparent: true,
+      CQL_FILTER: "0", // Başlangıçta hiçbir şey göstermeyecek (varsayılan olarak 0)
+      styles: 'selected-neighborhood-style', // Yeni stili belirtin (mahalle için uygun bir stil adı verin)
+    });
+
+
+document.addEventListener('DOMContentLoaded', function () {
+   map = L.map('map').setView([38.03, 32.50], 8);
+
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+
+  var editableLayers = new L.FeatureGroup();
+  map.addLayer(editableLayers);
+
+  var drawControl = new L.Control.Draw({
+    draw: {
+      polygon: true,
+      polyline: true,
+      rectangle: false,
+      circle: false,
+      marker: true
+    },
+    edit: {
+      featureGroup: editableLayers
+    }
+  });
+
+  map.addControl(drawControl);
+
+ // Store all shape data
+
+map.on('draw:created', function (e) {
+
+  var type = e.layerType,
+  layer = e.layer;
+
+  editableLayers.addLayer(layer);
+
+  var coordinates;
+  var shapeData;
+
+  if (type === 'polygon' ) {
+    coordinates = layer.getLatLngs();
+
+    shapeData = {
+      type: type,
+      coordinates: coordinates
+    }
+  } else if (type==='polyline'){
+  coordinates = layer.getLatLngs();
+
+   shapeData={
+   type:type,
+   coordinates: coordinates
+   }
+
+
+  }else if (type === 'circlemarker') {
+
+    coordinates = layer.getLatLng();
+    var radius = layer.getRadius();
+
+    shapeData = {
+      type: type,
+      center: coordinates,
+      radius: radius
+    };
+  }
+  else if(type==='marker'){
+   coordinates = layer.getLatLng();
+     shapeData = {
+      type: type,
+      coordinates: coordinates,
+    };
+  }
+
+  shapesArray.push(shapeData);
+  document.getElementById("ShapeSave").hidden = false;
+  document.getElementById("shapeNameInput").hidden = false;
+  document.getElementById("resetButton").hidden = true;
+  console.log(shapesArray);
+
+});
+
+
+document.getElementById('ShapeSave').addEventListener('click', function() {
+});
+
+
+   wmsLayer = L.tileLayer.wms('http://localhost:8082/geoserver/GeoserverTurkiye/wms', {
+    layers: 'GeoserverTurkiye:Konya',
+    format: 'image/png',
+    transparent: true
+  }).addTo(map);
+
+  if(selectedOption) {
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    allDistrictsLayer.addTo(map);
+  }
+
+  if(selectedMahalleID) {
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    selectedDistrictLayer.addTo(map);
+  }
+
+  var mahalleLayer = L.tileLayer.wms('http://localhost:8082/geoserver/GeoserverTurkiye/wms', {
+    layers: 'GeoserverTurkiye:mahallepolygon',
+    format: 'image/png',
+    transparent: true,
+     minZoom: 0, // minZoom ve maxZoom değerlerini belirleyin
+    maxZoom: 19
+  });
+
+  var ilceLayer = L.tileLayer.wms('http://localhost:8082/geoserver/GeoserverTurkiye/wms', {
+    layers: 'GeoserverTurkiye:ilcepolygon',
+    format: 'image/png',
+    transparent: true,
+     minZoom: 0, // minZoom ve maxZoom değerlerini belirleyin
+  maxZoom: 19
+  });
+
+  var konyaLayer = L.tileLayer.wms('http://localhost:8082/geoserver/GeoserverTurkiye/wms', {
+    layers: 'GeoserverTurkiye:Konya',
+    format: 'image/png',
+    transparent: true,
+     minZoom: 0, // minZoom ve maxZoom değerlerini belirleyin
+  maxZoom: 19
+  });
+
+var url2 = `http://localhost:8082/geoserver/wfs?request=GetFeature&version=1.1.0&service=WFS&typeName=GeoserverTurkiye:Konya&outputFormat=application/json`;
+var heat;
+ console.log(url2);
+
+fetch(url2)
+    .then(response => response.json())
+    .then(data => {
+        var heatData = [];
+        data.features.forEach(feature => {
+            var coordinates = feature.geometry.coordinates[0][0];
+            var sumX = 0;
+            var sumY = 0;
+            coordinates.forEach(coord => {
+                sumX += coord[0];
+                sumY += coord[1];
+            });
+            var centerX = sumX / coordinates.length;
+            var centerY = sumY / coordinates.length;
+            heatData.push([centerY, centerX]);
+        });
+
+        heat = L.heatLayer(heatData, {
+            radius: 20,
+            blur: 15,
+            maxZoom: 17
+        });
+    });
+
+
+var heatControl = L.control({position: 'topleft'});
+
+heatControl.onAdd = function (map) {
+    var div = L.DomUtil.create('div', 'heat-control');
+    div.innerHTML = '<button id="heatButton" class="btn btn-danger btn-sm">Heatmap</button>';
+    return div;
+};
+
+heatControl.addTo(map);
+
+// Düğmeye tıklama işlevselliği
+document.getElementById("heatButton").addEventListener("click", function() {
+    var heatButton = document.getElementById("heatButton");
+    if (map.hasLayer(heat)) {
+        map.removeLayer(heat);
+        heatButton.className  = 'btn btn-danger btn-sm'; // Kapalı durumda kırmızı
+    } else {
+        heat.addTo(map);
+        heatButton.className  = 'btn btn-warning btn-sm'; // Açık durumda sarı
+    }
+});
+
+
+
+
+
+
+
+
+//NEW <
+
+
+
+var çizimlerLayer = L.tileLayer.wms('http://localhost:8082/geoserver/GeoserverTurkiye/wms', {
+    layers: 'GeoserverTurkiye:CizilenShape',
+    format: 'image/png',
+    transparent: true
+});
+
+var selectedLayerNames = [];
+
+fetch('/userShapes')
+    .then(response => response.json())
+    .then(data => {
+
+        var baseMaps = {
+            "Mahalle": mahalleLayer,
+            "Ilce": ilceLayer,
+            "Konya": konyaLayer
+
+
+
+        };
+
+        var overlayMaps = {};
+
+        // overlayMaps'i oluştur
+        for (var i = 0; i < data.length; i++) {
+            overlayMaps[data[i].shapeNames] = L.tileLayer.wms('http://localhost:8082/geoserver/GeoserverTurkiye/wms', {
+                layers: 'GeoserverTurkiye:CizilenShape',
+                format: 'image/png',
+                transparent: true
+
+            });
+        }
+
+        L.control.layers(baseMaps, overlayMaps).addTo(map);
+    });
+
+map.on('overlayadd', function(layerEvent) {
+    var addedLayerName = layerEvent.name;
+    selectedLayerNames.push(addedLayerName);
+    var çizimlerLayer = layerEvent.layer;
+    çizimlerLayer.setParams({layers: 'GeoserverTurkiye:CizilenShape', CQL_FILTER: `shapename IN ('${selectedLayerNames.join("','")}')`});
+});
+
+map.on('overlayremove', function(layerEvent) {
+    var removedLayerName = layerEvent.name;
+    selectedLayerNames = selectedLayerNames.filter(name => name !== removedLayerName);
+    var çizimlerLayer = layerEvent.layer;
+    çizimlerLayer.setParams({layers: 'GeoserverTurkiye:CizilenShape', CQL_FILTER: `shapename IN ('${selectedLayerNames.join("','")}')`});
+});
+
+
+
+//NEW >
+var count=0;
+
+var infoButton = L.Control.extend({
+    options: {
+        position: 'topleft'  // Düğmenin yerleştirileceği konum
+    },
+
+
+    onAdd: function (map) {
+        var container = L.DomUtil.create('button');
+        container.innerText = 'Info';
+        container.style.backgroundColor = 'red';  // Başlangıçta butonun rengi kırmızı
+
+        var infoEnabled = false;
+        var clickHandler = function(e) {
+            var lat = e.latlng.lat;
+            var lng = e.latlng.lng;
+            console.log("x,y",lat,lng);
+
+    if (count!=0){
+       var layerChoice = window.prompt("Öğrenmek istediğiniz katmanı seçiniz:\n1) İlçe Katmanı\n2) Mahalle Katmanı", "");
+
+
+       var typeName;
+          if(layerChoice == 2) {
+              typeName = "GeoserverTurkiye:Konya";
+          } else {
+              typeName = "GeoserverTurkiye:ilcepolygon";
+          }
+
+
+
+
+
+    url = `http://localhost:8082/geoserver/GeoserverTurkiye/wms?SERVICE=WMS&VERSION=1.1.0&REQUEST=GetFeatureInfo&outputFormat=application/json&TRANSPARENT=true&QUERY_LAYERS=${typeName}&VERSION=1.1.0&SERVICE=WMS&LAYERS=${typeName}&exceptions=application%2Fvnd.ogc.se_inimage&CQL_FILTER=CONTAINS(geom, POINT(${lng} ${lat}))&INFO_FORMAT=application/json&FEATURE_COUNT=50&X=50&Y=50&SRS=EPSG%3A4326&STYLES=&WIDTH=101&HEIGHT=101&BBOX=${lng-0.1}%2C${lat-0.1}%2C${lng+0.1}%2C${lat+0.1}`; //ÇALIŞIYOR WMS
+
+
+
+
+
+}
+  count++;
+
+
+
+
+            console.log(url);
+
+            if(layerChoice==2){
+                      fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.features && data.features.length > 0) {
+                        var feature = data.features[0];
+                        var properties = feature.properties;
+                           var name = properties.adi_numara;
+                            var posta = properties.postakodu;
+                            var date = properties.isim_veril;
+
+                          var popupContent = `İsim: ${name}<br> Posta: ${posta}<br>İsim verilme Tarihi: ${date}`;
+
+                        L.popup()
+                            .setLatLng(e.latlng)
+                            .setContent(popupContent)
+                            .openOn(map);
+                    }
+                });
+
+            }
+            else{
+
+                 fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.features && data.features.length > 0) {
+                        var feature = data.features[0];
+                        var properties = feature.properties;
+                           var name = properties.adi_numara;
+
+                          var popupContent = `İsim: ${name}`;
+
+                        L.popup()
+                            .setLatLng(e.latlng)
+                            .setContent(popupContent)
+                            .openOn(map);
+                    }
+                });
+
+            }
+
+        };
+
+        container.onclick = function(){
+            infoEnabled = !infoEnabled;
+            if (infoEnabled) {
+                map.on('click', clickHandler);
+               container.style.backgroundColor = 'yellow';  // Buton aktif olduğunda rengi sarı olacak
+
+            } else {
+                map.off('click', clickHandler);
+                container.style.backgroundColor = 'red';  // Buton aktif olmadığında rengi kırmızı olacak
+
+                count=0;
+            }
+        }
+        return container;
+     }
+ });
+
+  map.addControl(new infoButton());
+
+  ilceRadioContainer = document.getElementById('ilceRadioContainer');
+  populateIlceRadios();
+  showIlcelerContainer();
+});
+
+
+
+
+
+
+
+
+
+document.getElementById('infoButton').addEventListener('click', function() {
+    document.getElementById('myModal').style.display = 'block';
+});
+
+document.getElementById('submitBtn').addEventListener('click', function() {
+    var selectedLayer = document.querySelector('input[name="katman"]:checked').value;
+    // Seçilen katmana göre URL'yi oluşturun ve fetch işlemini gerçekleştirin
+    document.getElementById('myModal').style.display = 'none';
+});
+
+
+
+
+
+
+
+
+function zoomIlce(){
+
+var geoJsonUrl = '/Ilceler.json';
+    var ilcelerData;
+    fetch(geoJsonUrl)
+  .then(response => response.json())
+  .then(data => {
+    ilcelerData = data;
+    var ilceRefValue =selectedOption ;
+
+      for (var i = 0; i < ilcelerData.features.length; i++) {
+      var ilce = ilcelerData.features[i];
+      if (ilce.properties.ilceref == ilceRefValue) {
+        istenenIlce = ilce;
+        break;
+      }
+    }
+
+
+    var ilceKoordinatlari = istenenIlce.geometry.coordinates;
+    console.log(ilceKoordinatlari);
+
+    var ilceMerkezKoordinatlari = turf.centerOfMass(istenenIlce).geometry.coordinates;
+
+     map.setView([ilceMerkezKoordinatlari[1], ilceMerkezKoordinatlari[0]], 10);
+
+  })
+  .catch(error => {
+    console.error('Hata:', error);
+  });
+}
+
+
+
+function zoomMahalle(){
+
+var geoJsonUrl = '/mahalleData.json';
+    var ilcelerData;
+  fetch(geoJsonUrl)
+  .then(response => response.json())
+  .then(data => {
+    ilcelerData = data;
+
+    var ilceRefValue =selectedMahalleID ;
+
+     for (var i = 0; i < ilcelerData.features.length; i++) {
+      var ilce = ilcelerData.features[i];
+      if (ilce.properties.mahalleref == ilceRefValue) {
+        istenenIlce = ilce;
+        break;
+      }
+    }
+
+
+    var ilceKoordinatlari = istenenIlce.geometry.coordinates;
+    console.log(ilceKoordinatlari);
+
+    var ilceMerkezKoordinatlari = turf.centerOfMass(istenenIlce).geometry.coordinates;
+
+     map.setView([ilceMerkezKoordinatlari[1], ilceMerkezKoordinatlari[0]], 12);
+
+  })
+  .catch(error => {
+    console.error('Hata:', error);
+  });
+}
+
+
+  </script>
+</body>
+
+</html>
